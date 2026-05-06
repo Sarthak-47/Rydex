@@ -1,5 +1,7 @@
-# Environments
+# Environments — never commit real secrets
 .env
+.env.local
+frontend/.env.local
 .venv/
 env/
 venv/

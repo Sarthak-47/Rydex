@@ -96,17 +96,22 @@ export function LossRatioPanel() {
     aggregate: { total_premium_rs: number; total_paid_rs: number; loss_ratio: number; total_claims: number; total_workers: number }
   } | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
   const [selected, setSelected] = useState<ZoneLossRatio | null>(null)
 
-  useEffect(() => {
+  const fetchData = () => {
+    setError(false)
+    setLoading(true)
     api.get('/analytics/loss-ratios').then(r => {
       setData(r.data)
       if (r.data.zones?.length) setSelected(r.data.zones[0])
-    }).finally(() => setLoading(false))
-  }, [])
+    }).catch(() => setError(true)).finally(() => setLoading(false))
+  }
+
+  useEffect(() => { fetchData() }, [])
 
   if (loading) return <LoadingSpinner />
-  if (!data) return null
+  if (error || !data) return <ErrorCard onRetry={fetchData} />
 
   const { zones, aggregate } = data
 
@@ -216,14 +221,19 @@ export function FraudRingsPanel() {
     algorithm: string
   } | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
   const [expanded, setExpanded] = useState<string | null>(null)
 
-  useEffect(() => {
-    api.get('/analytics/fraud-rings').then(r => setData(r.data)).finally(() => setLoading(false))
-  }, [])
+  const fetchData = () => {
+    setError(false)
+    setLoading(true)
+    api.get('/analytics/fraud-rings').then(r => setData(r.data)).catch(() => setError(true)).finally(() => setLoading(false))
+  }
+
+  useEffect(() => { fetchData() }, [])
 
   if (loading) return <LoadingSpinner />
-  if (!data) return null
+  if (error || !data) return <ErrorCard onRetry={fetchData} />
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -314,12 +324,17 @@ export function SyndicateAlertQueue() {
     alerts: SyndicateAlert[]
   } | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [resolved, setResolved] = useState<Record<string, 'approve' | 'reject'>>({})
 
-  useEffect(() => {
-    api.get('/analytics/syndicate-alerts').then(r => setData(r.data)).finally(() => setLoading(false))
-  }, [])
+  const fetchData = () => {
+    setError(false)
+    setLoading(true)
+    api.get('/analytics/syndicate-alerts').then(r => setData(r.data)).catch(() => setError(true)).finally(() => setLoading(false))
+  }
+
+  useEffect(() => { fetchData() }, [])
 
   async function handleResolve(claimId: string, action: 'approve' | 'reject') {
     setActionLoading(claimId + action)
@@ -333,7 +348,7 @@ export function SyndicateAlertQueue() {
   }
 
   if (loading) return <LoadingSpinner />
-  if (!data) return null
+  if (error || !data) return <ErrorCard onRetry={fetchData} />
 
   const tierColor = (t: string) => t === 'CRITICAL' ? CRIT : t === 'HIGH' ? WARN : '#FF9F1C'
   const pendingAlerts = data.alerts.filter(a => !resolved[a.claim_id])
@@ -451,13 +466,18 @@ export function ForecastPanel() {
     alerts: ForecastAlert[]
   } | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
 
-  useEffect(() => {
-    api.get('/analytics/forecast-alerts').then(r => setData(r.data)).finally(() => setLoading(false))
-  }, [])
+  const fetchData = () => {
+    setError(false)
+    setLoading(true)
+    api.get('/analytics/forecast-alerts').then(r => setData(r.data)).catch(() => setError(true)).finally(() => setLoading(false))
+  }
+
+  useEffect(() => { fetchData() }, [])
 
   if (loading) return <LoadingSpinner />
-  if (!data) return null
+  if (error || !data) return <ErrorCard onRetry={fetchData} />
 
   const TRIGGER_ICONS: Record<string, string> = {
     rainfall: 'water_drop', aqi: 'air', heat: 'thermostat', traffic: 'traffic', flood: 'flood'
@@ -537,6 +557,22 @@ function LoadingSpinner() {
   return (
     <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 80 }}>
       <span className="material-symbols-outlined animate-spin" style={{ color: ACCENT, fontSize: 36 }}>sync</span>
+    </div>
+  )
+}
+
+function ErrorCard({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 80, gap: 12 }}>
+      <span className="material-symbols-outlined" style={{ color: CRIT, fontSize: 40 }}>cloud_off</span>
+      <div style={{ color: '#fff', fontWeight: 700, fontSize: 15 }}>Failed to load data</div>
+      <div style={{ color: MUTED, fontSize: 13, marginBottom: 8 }}>Check your connection and try again.</div>
+      <button
+        onClick={onRetry}
+        style={{ background: ACCENT + '22', border: `1px solid ${ACCENT}44`, color: ACCENT, padding: '8px 20px', borderRadius: 8, fontWeight: 700, fontSize: 12, letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer' }}
+      >
+        Retry
+      </button>
     </div>
   )
 }

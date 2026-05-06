@@ -182,6 +182,7 @@ export default function AnalyticsPage() {
   const [summary, setSummary] = useState<WorkerSummary | null>(null)
   const [forecasts, setForecasts] = useState<ForecastAlert[]>([])
   const [loading, setLoading] = useState(true)
+  const [fetchError, setFetchError] = useState(false)
   const [activeTab, setActiveTab] = useState<'overview' | 'timeline' | 'forecast'>('overview')
 
   const load = useCallback(async (workerId: string, zoneId: string) => {
@@ -192,8 +193,8 @@ export default function AnalyticsPage() {
       ])
       setSummary(sumRes.data)
       setForecasts(fcRes.data.alerts || [])
-    } catch (e) {
-      console.error(e)
+    } catch {
+      setFetchError(true)
     } finally {
       setLoading(false)
     }
@@ -220,10 +221,20 @@ export default function AnalyticsPage() {
     )
   }
 
-  if (!summary) {
+  if (fetchError || !summary) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: BG, color: '#fff' }}>
-        <p>No data available.</p>
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: BG }}>
+        <div style={{ textAlign: 'center', color: '#fff' }}>
+          <span className="material-symbols-outlined" style={{ fontSize: 48, color: '#EF4444', display: 'block', marginBottom: 16 }}>cloud_off</span>
+          <p style={{ fontWeight: 700, marginBottom: 8 }}>Could not load analytics</p>
+          <p style={{ color: '#94A3B8', fontSize: 13, marginBottom: 20 }}>Check your connection and try again.</p>
+          <button
+            onClick={() => { setFetchError(false); setLoading(true); const w = JSON.parse(localStorage.getItem('rydex_worker') || '{}'); load(w.worker_id, w.zone_id) }}
+            style={{ background: '#10B98122', border: '1px solid #10B98144', color: '#10B981', padding: '10px 24px', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}
+          >
+            Retry
+          </button>
+        </div>
       </div>
     )
   }

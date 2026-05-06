@@ -15,9 +15,11 @@ export default function ClaimsList({ workerId, refreshTrigger }: ClaimsListProps
   const [claims, setClaims] = useState<Claim[]>([])
   const [payouts, setPayouts] = useState<Payout[]>([])
   const [loading, setLoading] = useState(true)
+  const [fetchError, setFetchError] = useState(false)
   const [selectedClaim, setSelectedClaim] = useState<Claim | null>(null)
 
   const fetchData = async () => {
+    setFetchError(false)
     try {
       const [claimsRes, payoutsRes] = await Promise.all([
         claimsApi.list(workerId),
@@ -25,8 +27,8 @@ export default function ClaimsList({ workerId, refreshTrigger }: ClaimsListProps
       ])
       setClaims(claimsRes.data)
       setPayouts(payoutsRes.data)
-    } catch (err) {
-      console.error("Failed to fetch ledger data:", err)
+    } catch {
+      setFetchError(true)
     } finally {
       setLoading(false)
     }
@@ -41,6 +43,21 @@ export default function ClaimsList({ workerId, refreshTrigger }: ClaimsListProps
       <div className="py-20 flex flex-col items-center justify-center space-y-6">
         <div className="w-16 h-16 rounded-full border-4 border-white/20/10 border-t-[var(--color-accent)] animate-spin"></div>
         <p className="text-[10px] font-black text-white/60 uppercase tracking-widest">Updating Registry...</p>
+      </div>
+    )
+  }
+
+  if (fetchError) {
+    return (
+      <div className="py-16 flex flex-col items-center justify-center space-y-4 card-premium rounded-2xl">
+        <span className="material-symbols-outlined text-4xl text-red-400">cloud_off</span>
+        <p className="text-sm font-black text-white/60 uppercase tracking-widest">Failed to load claims</p>
+        <button
+          onClick={() => { setLoading(true); fetchData() }}
+          className="btn-secondary text-xs py-2 px-6"
+        >
+          Retry
+        </button>
       </div>
     )
   }

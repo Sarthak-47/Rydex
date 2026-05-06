@@ -307,7 +307,7 @@ def fraud_rings(db: Session = Depends(get_db)):
 
 
 def _synthetic_fraud_rings():
-    """Returns demo fraud ring data for a clean Guidewire demo when DB is sparse."""
+    """Returns example fraud ring data when the database has fewer than 3 suspicious claims."""
     return {
         "rings_detected": 2,
         "noise_claims": 3,

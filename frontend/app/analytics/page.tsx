@@ -279,6 +279,9 @@ export default function AnalyticsPage() {
           </span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button onClick={() => router.push('/zones')} style={{ background: 'none', border: `1px solid ${BORDER}`, color: ACCENT, borderRadius: 8, padding: '4px 12px', cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>
+            Zone Map
+          </button>
           <span style={{ color: TEXT_MUTED, fontSize: 13 }}>{summary.worker_name} · {summary.zone_name}</span>
           <button onClick={logout} style={{ background: 'none', border: `1px solid ${BORDER}`, color: TEXT_MUTED, borderRadius: 8, padding: '4px 12px', cursor: 'pointer', fontSize: 12 }}>
             Logout
@@ -391,7 +394,7 @@ export default function AnalyticsPage() {
                   </ResponsiveContainer>
                 ) : (
                   <div style={{ color: TEXT_MUTED, textAlign: 'center', paddingTop: 60, fontSize: 13 }}>
-                    No disruption data yet — fire a trigger from dashboard.
+                    No disruption data yet. Payouts appear here when triggers fire during your shift.
                   </div>
                 )}
               </div>
@@ -476,7 +479,7 @@ export default function AnalyticsPage() {
                   </ResponsiveContainer>
                 ) : (
                   <div style={{ color: TEXT_MUTED, textAlign: 'center', paddingTop: 80, fontSize: 13 }}>
-                    No claims yet. Fire a trigger from the dashboard.
+                    No claims yet. Claims appear here once disruption triggers fire during your active shift.
                   </div>
                 )}
               </div>

@@ -34,6 +34,8 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'overview' | 'history'>('overview')
   const [refreshLedger, setRefreshLedger] = useState(0)
+  const [purchaseLoading, setPurchaseLoading] = useState(false)
+  const [purchaseError, setPurchaseError] = useState<string | null>(null)
 
   const fetchAll = useCallback(async (workerId: string, zoneId?: string) => {
     try {
@@ -76,6 +78,20 @@ export default function DashboardPage() {
     localStorage.removeItem('rydex_token')
     localStorage.removeItem('rydex_worker')
     router.push('/login')
+  }
+
+  async function handlePurchase() {
+    if (!worker) return
+    setPurchaseLoading(true)
+    setPurchaseError(null)
+    try {
+      const res = await policiesApi.purchase(worker.worker_id)
+      setPolicy(res.data)
+    } catch (e: any) {
+      setPurchaseError(e?.response?.data?.detail || 'Purchase failed. Try again.')
+    } finally {
+      setPurchaseLoading(false)
+    }
   }
 
   if (loading) {
@@ -181,10 +197,17 @@ export default function DashboardPage() {
                       {greeting}, {worker?.name?.split(' ')[0] || 'Rider'}
                     </h1>
                     <div className="flex flex-wrap gap-2 mt-3">
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[var(--color-accent)]/15 border border-[var(--color-accent)]/30 text-[var(--color-accent)] text-xs font-bold">
-                        <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-accent)] animate-pulse" />
-                        Policy Active
-                      </span>
+                      {policy ? (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[var(--color-accent)]/15 border border-[var(--color-accent)]/30 text-[var(--color-accent)] text-xs font-bold">
+                          <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-accent)] animate-pulse" />
+                          Policy Active
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-bold">
+                          <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+                          No Active Policy
+                        </span>
+                      )}
                       <span className="px-3 py-1 rounded-full bg-white/5 border border-white/10 text-white/60 text-xs font-bold">
                         {worker?.zone_name || 'Mumbai'}
                       </span>
@@ -315,7 +338,7 @@ export default function DashboardPage() {
 
                   {/* Right: Policy Card + Payouts */}
                   <div className="space-y-5">
-                    {policy && (
+                    {policy ? (
                       <div className="card-premium rounded-2xl p-5">
                         <div className="flex justify-between items-start mb-4">
                           <div>
@@ -346,6 +369,31 @@ export default function DashboardPage() {
                           />
                         </div>
                         <p className="text-[10px] text-white/30 font-bold mt-1.5 text-right">{100 - capUsedPct}% remaining</p>
+                      </div>
+                    ) : (
+                      <div className="card-premium rounded-2xl p-5 border border-dashed border-white/20 space-y-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-[var(--color-accent)]/10 flex items-center justify-center">
+                            <span className="material-symbols-outlined text-[var(--color-accent)] text-xl">shield_with_heart</span>
+                          </div>
+                          <div>
+                            <p className="text-sm font-black text-white">No active shield</p>
+                            <p className="text-xs text-white/40 font-bold">Your policy expired or was never set</p>
+                          </div>
+                        </div>
+                        <p className="text-xs text-white/50 leading-relaxed">
+                          Activate your shield for this week — the premium is auto-computed from your zone, shift, and history.
+                        </p>
+                        {purchaseError && (
+                          <p className="text-xs text-red-400 font-bold">{purchaseError}</p>
+                        )}
+                        <button
+                          onClick={handlePurchase}
+                          disabled={purchaseLoading}
+                          className="btn-primary w-full py-3 text-sm font-black uppercase tracking-widest disabled:opacity-50"
+                        >
+                          {purchaseLoading ? 'Activating…' : 'Activate Shield This Week'}
+                        </button>
                       </div>
                     )}
 

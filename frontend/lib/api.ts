@@ -49,6 +49,7 @@ export const workersApi = {
 // ── Policies ──────────────────────────────────────────────────────────────────
 export const policiesApi = {
   getActive: (workerId: string) => api.get(`/policies/active?worker_id=${workerId}`),
+  purchase: (workerId: string) => api.post('/policies/purchase', { worker_id: workerId }),
 }
 
 // ── Claims ────────────────────────────────────────────────────────────────────

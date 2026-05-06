@@ -8,7 +8,7 @@
  */
 
 import { useState, useEffect } from 'react'
-import { api } from '@/lib/api'
+import { api, claimsApi } from '@/lib/api'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   CartesianGrid, LineChart, Line, Cell
@@ -314,22 +314,36 @@ export function SyndicateAlertQueue() {
     alerts: SyndicateAlert[]
   } | null>(null)
   const [loading, setLoading] = useState(true)
+  const [actionLoading, setActionLoading] = useState<string | null>(null)
+  const [resolved, setResolved] = useState<Record<string, 'approve' | 'reject'>>({})
 
   useEffect(() => {
     api.get('/analytics/syndicate-alerts').then(r => setData(r.data)).finally(() => setLoading(false))
   }, [])
 
+  async function handleResolve(claimId: string, action: 'approve' | 'reject') {
+    setActionLoading(claimId + action)
+    try {
+      await claimsApi.resolveAdmin(claimId, action)
+      setResolved(prev => ({ ...prev, [claimId]: action }))
+    } catch {
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
   if (loading) return <LoadingSpinner />
   if (!data) return null
 
   const tierColor = (t: string) => t === 'CRITICAL' ? CRIT : t === 'HIGH' ? WARN : '#FF9F1C'
+  const pendingAlerts = data.alerts.filter(a => !resolved[a.claim_id])
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       {/* Stats bar */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
         {[
-          { label: 'Queue Depth', value: data.queue_depth, color: WARN },
+          { label: 'Queue Depth', value: pendingAlerts.length, color: WARN },
           { label: 'Blocked Payouts', value: '₹' + data.total_blocked_rs.toLocaleString('en-IN'), color: CRIT },
           { label: 'Critical', value: data.critical_count, color: CRIT },
           { label: 'High', value: data.high_count, color: WARN },
@@ -341,15 +355,13 @@ export function SyndicateAlertQueue() {
         ))}
       </div>
 
-      {data.alerts.length === 0 ? (
+      {pendingAlerts.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '60px 0', color: MUTED, fontSize: 14 }}>
-          Queue empty — no workers in manual review.
-          <br />
-          <span style={{ fontSize: 12 }}>Fire a fraud case from the Trigger Engine tab to populate.</span>
+          Queue empty — no claims pending review.
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {data.alerts.map(alert => (
+          {pendingAlerts.map(alert => (
             <div key={alert.claim_id} style={{ background: CARD_BG, border: `1px solid ${tierColor(alert.risk_tier)}44`, borderRadius: 14, padding: '18px 20px' }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
                 <div style={{ width: 44, height: 44, borderRadius: 10, background: tierColor(alert.risk_tier) + '22', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -371,7 +383,7 @@ export function SyndicateAlertQueue() {
                     {alert.explanation}
                   </div>
                   {/* Signal scores mini-bars */}
-                  <div style={{ display: 'flex', gap: 12 }}>
+                  <div style={{ display: 'flex', gap: 12, marginBottom: 14 }}>
                     {Object.entries(alert.signal_scores || {}).map(([sig, val]) => (
                       <div key={sig} style={{ flex: 1, minWidth: 50 }}>
                         <div style={{ color: MUTED, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', marginBottom: 2 }}>
@@ -387,6 +399,37 @@ export function SyndicateAlertQueue() {
                         </div>
                       </div>
                     ))}
+                  </div>
+                  {/* Review actions */}
+                  <div style={{ display: 'flex', gap: 10, borderTop: `1px solid ${BORDER}`, paddingTop: 12 }}>
+                    <button
+                      onClick={() => handleResolve(alert.claim_id, 'approve')}
+                      disabled={!!actionLoading}
+                      style={{
+                        flex: 1, padding: '8px 0', borderRadius: 8,
+                        background: actionLoading === alert.claim_id + 'approve' ? ACCENT + '44' : ACCENT + '22',
+                        color: ACCENT, border: `1px solid ${ACCENT}44`,
+                        fontWeight: 700, fontSize: 12, letterSpacing: '0.06em', textTransform: 'uppercase',
+                        cursor: actionLoading ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                      }}
+                    >
+                      <span className="material-symbols-outlined" style={{ fontSize: 16 }}>check_circle</span>
+                      {actionLoading === alert.claim_id + 'approve' ? 'Processing…' : 'Approve Payout'}
+                    </button>
+                    <button
+                      onClick={() => handleResolve(alert.claim_id, 'reject')}
+                      disabled={!!actionLoading}
+                      style={{
+                        flex: 1, padding: '8px 0', borderRadius: 8,
+                        background: actionLoading === alert.claim_id + 'reject' ? CRIT + '44' : CRIT + '22',
+                        color: CRIT, border: `1px solid ${CRIT}44`,
+                        fontWeight: 700, fontSize: 12, letterSpacing: '0.06em', textTransform: 'uppercase',
+                        cursor: actionLoading ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                      }}
+                    >
+                      <span className="material-symbols-outlined" style={{ fontSize: 16 }}>cancel</span>
+                      {actionLoading === alert.claim_id + 'reject' ? 'Processing…' : 'Reject Claim'}
+                    </button>
                   </div>
                 </div>
               </div>

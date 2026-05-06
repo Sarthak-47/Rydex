@@ -24,6 +24,7 @@ from db.models import (
     Claim, ClaimStatusEnum, Policy, PolicyStatusEnum,
     Worker, Zone, TriggerEvent, Payout, BaselineSnapshot
 )
+from config import get_settings
 
 logger = logging.getLogger("rydex.analytics")
 router = APIRouter()
@@ -33,10 +34,6 @@ router = APIRouter()
 
 @router.get("/loss-ratios")
 def loss_ratios(db: Session = Depends(get_db)):
-    """
-    Returns loss ratio (total_paid / total_premium) per zone, plus aggregate.
-    Also returns weekly trend for sparklines.
-    """
     zones = db.query(Zone).all()
     result = []
 
@@ -46,7 +43,6 @@ def loss_ratios(db: Session = Depends(get_db)):
     total_workers_all = 0
 
     for zone in zones:
-        # All policies in zone
         policies = (
             db.query(Policy)
             .join(Worker)
@@ -57,7 +53,6 @@ def loss_ratios(db: Session = Depends(get_db)):
         total_paid = sum(p.amount_paid_rs for p in policies)
         worker_count = db.query(Worker).filter(Worker.zone_id == zone.id).count()
 
-        # Claims in zone
         claims = (
             db.query(Claim)
             .join(Worker)
@@ -68,8 +63,6 @@ def loss_ratios(db: Session = Depends(get_db)):
         flagged = [c for c in claims if c.status == ClaimStatusEnum.manual_review]
 
         loss_ratio = round(total_paid / total_premium, 4) if total_premium > 0 else 0.0
-
-        # Weekly trend: last 5 weeks, simulated delta from actual (demo mode)
         weekly_trend = _compute_weekly_trend(zone.id, db)
 
         result.append({
@@ -108,13 +101,11 @@ def loss_ratios(db: Session = Depends(get_db)):
 
 
 def _compute_weekly_trend(zone_id: str, db: Session) -> List[dict]:
-    """Compute per-week loss ratios for the last 5 weeks."""
     now = datetime.utcnow()
     trend = []
     for i in range(4, -1, -1):
         week_start = now - timedelta(weeks=i + 1)
         week_end = now - timedelta(weeks=i)
-        # Find policies active in that week
         policies = (
             db.query(Policy)
             .join(Worker)
@@ -127,7 +118,7 @@ def _compute_weekly_trend(zone_id: str, db: Session) -> List[dict]:
         )
         premium = sum(p.weekly_premium_rs for p in policies)
         paid = sum(p.amount_paid_rs for p in policies)
-        # Inject realistic-looking historical variance for demo
+        # Synthetic baseline when no policies exist for that historical week
         if premium == 0:
             paid = random.uniform(0, 800)
             premium = random.uniform(1200, 2400)
@@ -144,10 +135,6 @@ def _compute_weekly_trend(zone_id: str, db: Session) -> List[dict]:
 
 @router.get("/as-distribution")
 def as_distribution(db: Session = Depends(get_db)):
-    """
-    Returns AS score histogram (buckets of 10) across all claims.
-    Also returns per-signal average scores for the radar chart.
-    """
     claims = db.query(Claim).all()
     if not claims:
         return {
@@ -158,7 +145,6 @@ def as_distribution(db: Session = Depends(get_db)):
             "fraud_rate_pct": 0,
         }
 
-    # Histogram buckets 0–10, 10–20, ... 90–100
     buckets = {f"{i*10}-{i*10+10}": 0 for i in range(10)}
     for c in claims:
         score = c.as_score or 0
@@ -166,7 +152,6 @@ def as_distribution(db: Session = Depends(get_db)):
         key = f"{bucket_idx*10}-{bucket_idx*10+10}"
         buckets[key] += 1
 
-    # Per-signal averages across all claims with breakdowns
     signal_totals = {
         "device_motion": [],
         "network_conditions": [],
@@ -190,10 +175,7 @@ def as_distribution(db: Session = Depends(get_db)):
     approved = [c for c in claims if c.status == ClaimStatusEnum.auto_approved]
 
     return {
-        "buckets": [
-            {"range": k, "count": v, "label": k}
-            for k, v in buckets.items()
-        ],
+        "buckets": [{"range": k, "count": v, "label": k} for k, v in buckets.items()],
         "signal_averages": signal_averages,
         "total_claims": len(claims),
         "mean_as_score": round(sum(c.as_score for c in claims) / len(claims), 1),
@@ -215,23 +197,20 @@ def as_distribution(db: Session = Depends(get_db)):
 def fraud_rings(db: Session = Depends(get_db)):
     """
     Runs DBSCAN on claim feature vectors to detect coordinated fraud rings.
-    Features used: AS score, claim_frequency_7d, claim_to_trigger_delta_mins,
-                   earnings_delta_ratio, payout_amount_rs, hour_of_day
-    Returns cluster assignments and ring summaries.
+    Falls back to synthetic example data when fewer than 3 suspicious claims exist.
     """
     from sklearn.cluster import DBSCAN
     from sklearn.preprocessing import StandardScaler
 
     claims = (
         db.query(Claim)
-        .filter(Claim.as_score < 75)  # Only suspicious claims
+        .filter(Claim.as_score < 75)
         .order_by(Claim.created_at.desc())
         .limit(200)
         .all()
     )
 
     if len(claims) < 3:
-        # Add demo synthetic fraud ring data for presentation
         return _synthetic_fraud_rings()
 
     feature_rows = []
@@ -273,7 +252,7 @@ def fraud_rings(db: Session = Depends(get_db)):
     rings = {}
     for i, label in enumerate(labels):
         if label == -1:
-            continue  # noise
+            continue
         key = f"ring_{label}"
         if key not in rings:
             rings[key] = []
@@ -307,7 +286,7 @@ def fraud_rings(db: Session = Depends(get_db)):
 
 
 def _synthetic_fraud_rings():
-    """Returns example fraud ring data when the database has fewer than 3 suspicious claims."""
+    """Returns example fraud ring data when database has fewer than 3 suspicious claims."""
     return {
         "rings_detected": 2,
         "noise_claims": 3,
@@ -358,10 +337,6 @@ def _synthetic_fraud_rings():
 
 @router.get("/syndicate-alerts")
 def syndicate_alerts(db: Session = Depends(get_db)):
-    """
-    Returns workers currently in the manual_review queue.
-    These are the Isolation Forest flagged claims requiring insurer action.
-    """
     claims = (
         db.query(Claim)
         .filter(Claim.status == ClaimStatusEnum.manual_review)
@@ -384,7 +359,6 @@ def syndicate_alerts(db: Session = Depends(get_db)):
             "zone_name": zone.name if zone else "Unknown",
             "as_score": c.as_score,
             "iso_anomaly_flag": bd.get("iso_anomaly_flag", False),
-            "iso_score_raw": bd.get("iso_score_raw", 0),
             "payout_blocked_rs": c.payout_amount_rs,
             "signal_scores": ss,
             "triggered_at": c.created_at.isoformat(),
@@ -406,6 +380,99 @@ def syndicate_alerts(db: Session = Depends(get_db)):
 
 # ─── 5. FORECAST ALERTS (6-hour ahead) ────────────────────────────────────────
 
+# Default scenario templates used when live API is unavailable
+_FORECAST_SCENARIOS = [
+    {
+        "trigger_type": "rainfall",
+        "probability": 0.82,
+        "expected_value": 64.0,
+        "threshold": 50.0,
+        "unit": "mm/day",
+        "expected_duration_mins": 110,
+        "expected_payout_per_worker_rs": 340.0,
+        "icon": "water_drop",
+        "severity": "HIGH",
+    },
+    {
+        "trigger_type": "aqi",
+        "probability": 0.61,
+        "expected_value": 318.0,
+        "threshold": 300.0,
+        "unit": "AQI index",
+        "expected_duration_mins": 85,
+        "expected_payout_per_worker_rs": 210.0,
+        "icon": "air",
+        "severity": "MEDIUM",
+    },
+    {
+        "trigger_type": "traffic",
+        "probability": 0.74,
+        "expected_value": 5.2,
+        "threshold": 8.0,
+        "unit": "km/h avg",
+        "expected_duration_mins": 120,
+        "expected_payout_per_worker_rs": 280.0,
+        "icon": "traffic",
+        "severity": "HIGH",
+    },
+]
+
+
+def _fetch_owm_forecast(lat: float, lng: float, api_key: str) -> Optional[List[dict]]:
+    """
+    Calls OpenWeatherMap 5-day/3-hour forecast API and returns disruption
+    scenarios likely to breach thresholds in the next 6 hours.
+    Returns None on any error.
+    """
+    import httpx
+    settings = get_settings()
+    try:
+        url = "https://api.openweathermap.org/data/2.5/forecast"
+        params = {"lat": lat, "lon": lng, "appid": api_key, "units": "metric", "cnt": 2}
+        resp = httpx.get(url, params=params, timeout=5.0)
+        resp.raise_for_status()
+        data = resp.json()
+
+        scenarios = []
+        for item in data.get("list", [])[:2]:
+            rain_3h = item.get("rain", {}).get("3h", 0)
+            temp = item.get("main", {}).get("temp", 25)
+            wind = item.get("wind", {}).get("speed", 5)
+            dt_txt = item.get("dt_txt", "")
+
+            if rain_3h * 8 >= settings.rainfall_threshold_mm:
+                prob = min(0.95, rain_3h * 8 / settings.rainfall_threshold_mm * 0.7)
+                scenarios.append({
+                    "trigger_type": "rainfall",
+                    "probability": round(prob, 2),
+                    "expected_value": round(rain_3h * 8, 1),
+                    "threshold": settings.rainfall_threshold_mm,
+                    "unit": "mm/day",
+                    "expected_duration_mins": 90,
+                    "expected_payout_per_worker_rs": 320.0,
+                    "icon": "water_drop",
+                    "severity": "HIGH" if prob > 0.7 else "MEDIUM",
+                })
+
+            if temp >= settings.heat_threshold_celsius:
+                scenarios.append({
+                    "trigger_type": "heat",
+                    "probability": 0.85,
+                    "expected_value": round(temp, 1),
+                    "threshold": settings.heat_threshold_celsius,
+                    "unit": "°C",
+                    "expected_duration_mins": settings.heat_duration_mins,
+                    "expected_payout_per_worker_rs": 250.0,
+                    "icon": "thermostat",
+                    "severity": "HIGH",
+                })
+
+        return scenarios if scenarios else None
+    except Exception as exc:
+        logger.warning("OWM forecast fetch failed: %s", exc)
+        return None
+
+
 @router.get("/forecast-alerts")
 def forecast_alerts(
     zone_id: Optional[str] = Query(default=None),
@@ -413,62 +480,33 @@ def forecast_alerts(
 ):
     """
     Returns 6-hour ahead disruption forecast push alerts.
-    In production: uses OpenWeatherMap 7-day forecast API.
-    Demo: generates realistic forecast windows for all zones.
+    Uses OpenWeatherMap forecast API when OPENWEATHER_API_KEY is configured;
+    falls back to scenario simulation otherwise.
     """
+    settings = get_settings()
     zones = db.query(Zone).all()
     if zone_id:
         zones = [z for z in zones if z.id == zone_id]
 
     now = datetime.utcnow()
     alerts = []
-
-    # Deterministic but realistic-looking forecast for demo
-    forecast_scenarios = [
-        {
-            "trigger_type": "rainfall",
-            "probability": 0.82,
-            "expected_value": 64.0,
-            "threshold": 50.0,
-            "unit": "mm/day",
-            "expected_duration_mins": 110,
-            "expected_payout_per_worker_rs": 340.0,
-            "icon": "water_drop",
-            "severity": "HIGH",
-        },
-        {
-            "trigger_type": "aqi",
-            "probability": 0.61,
-            "expected_value": 318.0,
-            "threshold": 300.0,
-            "unit": "AQI index",
-            "expected_duration_mins": 85,
-            "expected_payout_per_worker_rs": 210.0,
-            "icon": "air",
-            "severity": "MEDIUM",
-        },
-        {
-            "trigger_type": "traffic",
-            "probability": 0.74,
-            "expected_value": 5.2,
-            "threshold": 8.0,
-            "unit": "km/h avg",
-            "expected_duration_mins": 120,
-            "expected_payout_per_worker_rs": 280.0,
-            "icon": "traffic",
-            "severity": "HIGH",
-        },
-    ]
+    use_live = settings.has_weather_api()
+    data_source = "OpenWeatherMap Forecast API" if use_live else "simulated (configure OPENWEATHER_API_KEY for live data)"
 
     for i, zone in enumerate(zones):
-        # Select 1–2 scenarios per zone based on zone flood risk
-        n_scenarios = 2 if zone.flood_risk_index > 0.6 else 1
-        selected = forecast_scenarios[:n_scenarios]
+        # Attempt live weather data per zone
+        live_scenarios = None
+        if use_live:
+            live_scenarios = _fetch_owm_forecast(zone.lat, zone.lng, settings.openweather_api_key)
 
-        for j, scenario in enumerate(selected):
+        scenarios = live_scenarios if live_scenarios else (
+            _FORECAST_SCENARIOS[:2] if zone.flood_risk_index > 0.6 else _FORECAST_SCENARIOS[:1]
+        )
+        workers_in_zone = db.query(Worker).filter(Worker.zone_id == zone.id).count()
+
+        for j, scenario in enumerate(scenarios):
             expected_onset_hours = round(2.5 + (i * 1.3 + j * 0.7) % 4, 1)
             onset_time = now + timedelta(hours=expected_onset_hours)
-            workers_in_zone = db.query(Worker).filter(Worker.zone_id == zone.id).count()
 
             alerts.append({
                 "alert_id": str(uuid.uuid4()),
@@ -489,12 +527,13 @@ def forecast_alerts(
                 "total_exposure_rs": round(
                     scenario["expected_payout_per_worker_rs"] * workers_in_zone * scenario["probability"], 2
                 ),
-                "icon": scenario["icon"],
+                "icon": scenario.get("icon", "warning"),
                 "recommendation": (
                     f"Pre-notify {workers_in_zone} enrolled workers in {zone.name}. "
-                    f"Reserve ₹{round(scenario['expected_payout_per_worker_rs'] * workers_in_zone * scenario['probability']):.0f} in payout buffer."
+                    f"Reserve ₹{round(scenario['expected_payout_per_worker_rs'] * workers_in_zone * scenario['probability']):.0f} "
+                    f"in payout buffer."
                 ),
-                "data_source": "OpenWeatherMap Forecast API (demo mode: simulated)",
+                "data_source": data_source,
             })
 
     alerts.sort(key=lambda x: (-x["probability_pct"], x["expected_onset_hours_from_now"]))
@@ -504,6 +543,7 @@ def forecast_alerts(
         "forecast_window_hours": 6,
         "alert_count": len(alerts),
         "total_exposure_rs": round(sum(a["total_exposure_rs"] for a in alerts), 2),
+        "live_data": use_live,
         "alerts": alerts,
     }
 
@@ -524,7 +564,6 @@ def worker_summary(worker_id: str, db: Session = Depends(get_db)):
     if not worker:
         return {"error": "Worker not found"}
 
-    # All-time claims
     claims = (
         db.query(Claim)
         .filter(Claim.worker_id == worker_id)
@@ -532,7 +571,6 @@ def worker_summary(worker_id: str, db: Session = Depends(get_db)):
         .all()
     )
 
-    # Active policy
     policy = (
         db.query(Policy)
         .filter(
@@ -543,7 +581,6 @@ def worker_summary(worker_id: str, db: Session = Depends(get_db)):
         .first()
     )
 
-    # Current baseline
     baseline = (
         db.query(BaselineSnapshot)
         .filter(BaselineSnapshot.worker_id == worker_id)
@@ -554,30 +591,26 @@ def worker_summary(worker_id: str, db: Session = Depends(get_db)):
     approved_claims = [c for c in claims if c.status == ClaimStatusEnum.auto_approved]
     total_protected = round(sum(c.payout_amount_rs for c in approved_claims), 2)
 
-    # Disruption type breakdown
-    trigger_breakdown = {}
+    # Disruption type breakdown via trigger events
+    trigger_breakdown: dict = {}
     for c in approved_claims:
-        te = db.get(__import__('db.models', fromlist=['TriggerEvent']).TriggerEvent, c.trigger_event_id)
-        if te:
-            ttype = te.trigger_type.value
-            trigger_breakdown[ttype] = trigger_breakdown.get(ttype, 0) + 1
+        if c.trigger_event_id:
+            te = db.get(TriggerEvent, c.trigger_event_id)
+            if te:
+                ttype = te.trigger_type.value
+                trigger_breakdown[ttype] = trigger_breakdown.get(ttype, 0) + 1
 
-    # Weekly chart: last 8 weeks simulated + actual
     now = datetime.utcnow()
     weekly_chart = []
     for i in range(7, -1, -1):
         week_start = now - timedelta(weeks=i + 1)
         week_end = now - timedelta(weeks=i)
-        week_claims = [
-            c for c in approved_claims
-            if week_start <= c.created_at < week_end
-        ]
+        week_claims = [c for c in approved_claims if week_start <= c.created_at < week_end]
         weekly_payout = sum(c.payout_amount_rs for c in week_claims)
 
         baseline_daily = baseline.daily_baseline_rs if baseline else 600.0
-        # Simulated income: full week minus disruption loss
-        sim_disrupted_hrs = sum(c.disrupted_hours for c in week_claims)
         baseline_hourly = baseline.hourly_baseline_rs if baseline else 80.0
+        sim_disrupted_hrs = sum(c.disrupted_hours for c in week_claims)
         sim_income = max(0, baseline_daily * 6 - sim_disrupted_hrs * baseline_hourly)
 
         weekly_chart.append({
@@ -587,7 +620,6 @@ def worker_summary(worker_id: str, db: Session = Depends(get_db)):
             "disruption_events": len(week_claims),
         })
 
-    # AS score timeline
     as_timeline = [
         {
             "date": c.created_at.strftime("%b %d %H:%M"),

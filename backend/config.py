@@ -1,18 +1,29 @@
 from pydantic_settings import BaseSettings
 from functools import lru_cache
+from typing import Optional
 
 
 class Settings(BaseSettings):
-    # Default to mysql service for Docker consistency, or localhost for local dev if overridden in .env
-    database_url: str = "mysql+pymysql://rydex_user:rydex_pass@mysql:3306/rydex"
-    openweather_api_key: str = "demo_key"
-    aqi_api_key: str = "demo_key"
-    jwt_secret: str = "rydex_jwt_secret_change_in_prod"
+    # Database
+    database_url: str
+
+    # Auth
+    jwt_secret: str
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 10080  # 7 days
-    razorpay_key_id: str = "rzp_test_demo"
-    razorpay_key_secret: str = "demo_secret"
-    demo_mode: bool = True
+
+    # External APIs — all optional; features degrade gracefully if missing
+    openweather_api_key: Optional[str] = None
+    aqi_api_key: Optional[str] = None
+    traffic_api_key: Optional[str] = None
+    razorpay_key_id: Optional[str] = None
+    razorpay_key_secret: Optional[str] = None
+    twilio_account_sid: Optional[str] = None
+    twilio_auth_token: Optional[str] = None
+    twilio_phone_number: Optional[str] = None
+
+    # CORS
+    frontend_url: str = "http://localhost:3000"
 
     # Trigger thresholds
     rainfall_threshold_mm: float = 50.0
@@ -34,6 +45,22 @@ class Settings(BaseSettings):
 
     class Config:
         env_file = ".env"
+        extra = "ignore"
+
+    def has_weather_api(self) -> bool:
+        return bool(self.openweather_api_key)
+
+    def has_aqi_api(self) -> bool:
+        return bool(self.aqi_api_key)
+
+    def has_traffic_api(self) -> bool:
+        return bool(self.traffic_api_key)
+
+    def has_payments(self) -> bool:
+        return bool(self.razorpay_key_id and self.razorpay_key_secret)
+
+    def has_sms(self) -> bool:
+        return bool(self.twilio_account_sid and self.twilio_auth_token)
 
 
 @lru_cache()

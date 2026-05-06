@@ -397,29 +397,44 @@ export default function DashboardPage() {
                       </div>
                     )}
 
-                    {/* Recent Payouts */}
+                    {/* Payout History */}
                     <div>
-                      <h2 className="text-xs font-black uppercase tracking-widest text-white/40 mb-3">Recent Payouts</h2>
+                      <h2 className="text-xs font-black uppercase tracking-widest text-white/40 mb-3">Payout History</h2>
                       <div className="space-y-2">
                         {payouts.length === 0 ? (
-                          <div className="card-premium rounded-2xl p-6 text-center">
-                            <p className="text-xs text-white/30 font-bold">No payouts yet</p>
+                          <div className="card-premium rounded-2xl p-6 text-center space-y-2">
+                            <span className="material-symbols-outlined text-2xl text-white/20 block">account_balance_wallet</span>
+                            <p className="text-xs text-white/30 font-bold uppercase tracking-widest">No payouts yet</p>
                           </div>
                         ) : (
-                          payouts.slice(0, 3).map(p => (
-                            <div key={p.id} className="card-premium rounded-xl p-4 flex items-center justify-between">
-                              <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 rounded-lg bg-green-500/15 flex items-center justify-center">
-                                  <span className="material-symbols-outlined text-green-400 text-base">payments</span>
+                          payouts.slice(0, 5).map(p => {
+                            const isCompleted = p.status === 'success' || p.status === 'completed'
+                            const isPending = p.status === 'pending'
+                            const isFailed = p.status === 'failed'
+                            const statusStyle = isCompleted
+                              ? { icon: 'check_circle', color: 'text-green-400', bg: 'bg-green-500/10', label: 'Paid' }
+                              : isPending
+                              ? { icon: 'schedule', color: 'text-yellow-400', bg: 'bg-yellow-500/10', label: 'Pending' }
+                              : { icon: 'error', color: 'text-red-400', bg: 'bg-red-500/10', label: 'Failed' }
+                            return (
+                              <div key={p.id} className="card-premium rounded-xl p-4 flex items-center gap-3">
+                                <div className={`w-8 h-8 rounded-lg ${statusStyle.bg} flex items-center justify-center shrink-0`}>
+                                  <span className={`material-symbols-outlined text-base ${statusStyle.color}`}>{statusStyle.icon}</span>
                                 </div>
-                                <div>
-                                  <p className="font-mono font-black text-white text-sm">₹{p.amount_rs.toLocaleString()}</p>
-                                  <p className="text-[10px] text-white/40 font-bold">UPI • {p.status}</p>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between">
+                                    <p className="font-mono font-black text-white text-sm">₹{Math.round(p.amount_rs).toLocaleString()}</p>
+                                    <span className={`text-[10px] font-black uppercase tracking-wider ${statusStyle.color}`}>{statusStyle.label}</span>
+                                  </div>
+                                  <p className="text-[10px] text-white/30 font-bold truncate mt-0.5">
+                                    {p.upi_ref ? `UPI: ${p.upi_ref}` : 'UPI'}
+                                    {isCompleted && p.latency_seconds ? ` · ${p.latency_seconds}s` : ''}
+                                    {isFailed ? ' · Contact support' : ''}
+                                  </p>
                                 </div>
                               </div>
-                              <span className="text-xs font-bold text-green-400">✓</span>
-                            </div>
-                          ))
+                            )
+                          })
                         )}
                       </div>
                     </div>

@@ -121,34 +121,11 @@ export default function LoginPage() {
               {loading ? <span className="material-symbols-outlined animate-spin font-bold">sync</span> : 'Sign In'}
             </button>
 
-            <div className="pt-10 border-t border-white/10">
-              <div className="flex justify-between items-center mb-8">
-                <p className="text-[9px] text-white/40 uppercase tracking-widest font-black">Demo Logins</p>
-                <div className="h-[1px] flex-1 bg-white/5/50 ml-6"></div>
-              </div>
-              <div className="grid grid-cols-1 gap-3">
-                {[
-                    { name: 'Salim (Bandra)', phone: '9820001001' },
-                    { name: 'Priya (Andheri)', phone: '9820001002' },
-                    { name: 'Arjun (Powai)', phone: '9820001003' },
-                ].map((w) => (
-                    <button
-                      key={w.phone}
-                      type="button"
-                      onClick={() => { setPhone(w.phone); setPassword('demo1234') }}
-                      className="w-full text-left p-5 rounded-2xl bg-white/5 hover:bg-white/10  transition-all border border-white/10 flex justify-between items-center group"
-                    >
-                      <span className="text-[10px] font-black text-white/90 uppercase tracking-widest leading-none">{w.name}</span>
-                      <span className="font-mono text-xs opacity-40 group-hover:opacity-100 transition-opacity">+{w.phone}</span>
-                    </button>
-                ))}
-              </div>
-              <div className="mt-10 text-center">
-                   <Link href="/admin" className="text-[10px] text-white/40 font-black uppercase tracking-widest hover:text-[var(--color-accent)] transition-all flex items-center justify-center gap-3">
-                      Admin Login
-                      <span className="material-symbols-outlined text-sm">arrow_right_alt</span>
-                   </Link>
-              </div>
+            <div className="pt-6 text-center border-t border-white/10">
+              <Link href="/admin" className="text-[10px] text-white/40 font-black uppercase tracking-widest hover:text-[var(--color-accent)] transition-all flex items-center justify-center gap-3">
+                Admin Login
+                <span className="material-symbols-outlined text-sm">arrow_right_alt</span>
+              </Link>
             </div>
           </form>
         </motion.div>

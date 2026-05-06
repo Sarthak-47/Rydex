@@ -30,6 +30,10 @@ interface PremiumResult {
 const PLATFORMS = [
   { value: 'swiggy', label: 'Swiggy' },
   { value: 'zomato', label: 'Zomato' },
+  { value: 'blinkit', label: 'Blinkit' },
+  { value: 'dunzo', label: 'Dunzo' },
+  { value: 'instamart', label: 'Instamart' },
+  { value: 'other', label: 'Other' },
 ]
 
 const SHIFT_TYPES = [
@@ -63,6 +67,7 @@ export default function RegisterPage() {
   const [upiId, setUpiId] = useState('')
 
   const [result, setResult] = useState<PremiumResult | null>(null)
+  const [otpUnavailable, setOtpUnavailable] = useState(false)
 
   useEffect(() => {
     workersApi.getZones().then((r) => {
@@ -79,18 +84,37 @@ export default function RegisterPage() {
   async function handleSendOtp(e: React.FormEvent) {
     e.preventDefault()
     setError('')
-    setStep('otp')
+    setLoading(true)
+    try {
+      await workersApi.sendOtp(phone.trim())
+      setOtpUnavailable(false)
+    } catch (err: any) {
+      if (err.response?.status === 503) {
+        setOtpUnavailable(true)
+      }
+    } finally {
+      setLoading(false)
+      setStep('otp')
+    }
   }
 
   async function handleVerifyOtp(e: React.FormEvent) {
     e.preventDefault()
     setError('')
+    if (otpUnavailable) {
+      setStep('profile')
+      return
+    }
     setLoading(true)
     try {
       await workersApi.verifyOtp(phone.trim(), otp.trim())
       setStep('profile')
-    } catch {
-      setError('Invalid OTP. Use 123456 for demo.')
+    } catch (err: any) {
+      if (err.response?.status === 501) {
+        setStep('profile')
+      } else {
+        setError('Invalid OTP. Please check the code sent to your phone.')
+      }
     } finally {
       setLoading(false)
     }
@@ -154,9 +178,9 @@ export default function RegisterPage() {
             {/* Progress Pattern */}
             <div className="flex items-center justify-between mb-20 px-6">
                 {[
-                    { id: 1, label: 'Identity', active: step === 'phone' || step === 'otp' || step === 'profile' || step === 'done' },
-                    { id: 2, label: 'Analysis', active: step === 'profile' || step === 'done' },
-                    { id: 3, label: 'Approval', active: step === 'done' }
+                    { id: 1, label: 'Verify', active: step === 'phone' || step === 'otp' || step === 'profile' || step === 'done' },
+                    { id: 2, label: 'Profile', active: step === 'profile' || step === 'done' },
+                    { id: 3, label: 'Confirmed', active: step === 'done' }
                 ].map((s, i) => (
                     <Fragment key={s.id}>
                         <div className="flex flex-col items-center gap-4">
@@ -176,7 +200,7 @@ export default function RegisterPage() {
                     className="space-y-12"
                 >
                     <div className="space-y-4 text-center">
-                        <h1 className="text-6xl font-headline font-black tracking-tighter text-on-background uppercase leading-none">Identity.</h1>
+                        <h1 className="text-6xl font-headline font-black tracking-tighter text-on-background uppercase leading-none">Verify.</h1>
                         <p className="text-[var(--color-accent)] text-xs font-black uppercase tracking-widest leading-relaxed">Enter your phone number to begin</p>
                     </div>
                     <form onSubmit={step === 'phone' ? handleSendOtp : handleVerifyOtp} className="card-premium p-8 space-y-10">
@@ -200,12 +224,12 @@ export default function RegisterPage() {
                                 <button type="submit" className="btn-primary w-full h-20 shadow-2xl">
                                     Send OTP
                                 </button>
-                                <p className="text-center text-[10px] text-white/60 mt-4 font-black uppercase tracking-widest">Already a node? <Link href="/login" className="text-[var(--color-accent)] hover:underline decoration-2 underline-offset-4">Sign in</Link></p>
+                                <p className="text-center text-[10px] text-white/60 mt-4 font-black uppercase tracking-widest">Already registered? <Link href="/login" className="text-[var(--color-accent)] hover:underline decoration-2 underline-offset-4">Sign in</Link></p>
                             </>
                         )}
                         {step === 'otp' && (
                             <>
-                                <button type="button" onClick={() => setStep('phone')} className="flex items-center text-[10px] font-black text-white/60 hover:text-[var(--color-accent)] mb-6 uppercase tracking-widest transition-colors"><span className="material-symbols-outlined mr-3 text-sm">arrow_back</span>Correction</button>
+                                <button type="button" onClick={() => setStep('phone')} className="flex items-center text-[10px] font-black text-white/60 hover:text-[var(--color-accent)] mb-6 uppercase tracking-widest transition-colors"><span className="material-symbols-outlined mr-3 text-sm">arrow_back</span>Change Number</button>
                                 <div className="space-y-6">
                                     <label className="text-muted ml-2 text-center block">Enter OTP</label>
                                     <input 
@@ -215,7 +239,14 @@ export default function RegisterPage() {
                                         placeholder="------"
                                         value={otp} onChange={(e) => setOtp(e.target.value)} required 
                                     />
-                                    <p className="text-center text-[10px] text-white/60 font-black uppercase tracking-widest">Code routed to +91 {phone} <br/> <span className="text-[var(--color-accent)]/80 mt-1 block">DEMO OVERRIDE: 123456</span></p>
+                                    {otpUnavailable ? (
+                                      <div className="flex items-start gap-3 bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4">
+                                        <span className="material-symbols-outlined text-yellow-400 text-sm mt-0.5">info</span>
+                                        <p className="text-[10px] text-yellow-400 font-bold leading-relaxed">SMS verification is not configured in this deployment. Click <strong>Verify &amp; Continue</strong> to proceed without OTP.</p>
+                                      </div>
+                                    ) : (
+                                      <p className="text-center text-[10px] text-white/60 font-black uppercase tracking-widest">Code sent to +91 {phone}</p>
+                                    )}
                                 </div>
                                 {error && <p className="text-[10px] font-black text-red-600 uppercase tracking-widest text-center bg-red-50 py-4 rounded-xl border border-red-100">{error}</p>}
                                 <button disabled={loading} type="submit" className="btn-primary w-full h-20 shadow-2xl">

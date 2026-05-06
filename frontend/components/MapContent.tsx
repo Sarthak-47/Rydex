@@ -1,43 +1,39 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { MapContainer, TileLayer, Marker, Popup, CircleMarker, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { workersApi } from "@/lib/api";
 
-// Formats map upon any resize or rendering anomaly 
+interface ZoneData {
+  id: string;
+  name: string;
+  pin_code: string;
+  lat: number;
+  lng: number;
+  flood_risk_index: number;
+  zone_factor: number;
+}
+
 function MapResizer() {
   const map = useMap();
   useEffect(() => {
-    // Initial invalidate
-    const timeoutId = setTimeout(() => {
-      map.invalidateSize();
-    }, 250);
-    
-    // Resize observer for container changes (like tabs)
+    const timeoutId = setTimeout(() => { map.invalidateSize(); }, 250);
     const resizeObserver = new ResizeObserver(() => {
-      requestAnimationFrame(() => {
-        map.invalidateSize();
-      });
+      requestAnimationFrame(() => { map.invalidateSize(); });
     });
-    
     const container = map.getContainer();
-    if (container) {
-      resizeObserver.observe(container);
-    }
-    
+    if (container) resizeObserver.observe(container);
     return () => {
       clearTimeout(timeoutId);
-      if (container) {
-        resizeObserver.unobserve(container);
-      }
+      if (container) resizeObserver.unobserve(container);
       resizeObserver.disconnect();
     };
   }, [map]);
   return null;
 }
 
-// Fix for default Leaflet icon assets in Next.js
 const fixLeafletIcons = () => {
   delete (L.Icon.Default.prototype as any)._getIconUrl;
   L.Icon.Default.mergeOptions({
@@ -47,17 +43,24 @@ const fixLeafletIcons = () => {
   });
 };
 
-const ZONES = [
-  { id: "zone-bandra", name: "Bandra West", coords: [19.0596, 72.8295] },
-  { id: "zone-andheri", name: "Andheri West", coords: [19.1363, 72.8277] },
-  { id: "zone-powai", name: "Powai", coords: [19.1176, 72.9060] },
-  { id: "zone-dharavi", name: "Dharavi-Sion", coords: [19.0402, 72.8596] },
-  { id: "zone-dadar", name: "Dadar", coords: [19.0178, 72.8478] }
-];
+function riskColor(floodRisk: number) {
+  if (floodRisk >= 0.7) return { stroke: "#EF4444", fill: "#EF4444" };
+  if (floodRisk >= 0.45) return { stroke: "#F59E0B", fill: "#F59E0B" };
+  return { stroke: "#10B981", fill: "#10B981" };
+}
+
+function riskLabel(floodRisk: number) {
+  if (floodRisk >= 0.7) return "High";
+  if (floodRisk >= 0.45) return "Medium";
+  return "Low";
+}
 
 export default function MapContent({ recentClaims = [] }: { recentClaims?: any[] }) {
+  const [zones, setZones] = useState<ZoneData[]>([]);
+
   useEffect(() => {
     fixLeafletIcons();
+    workersApi.getZones().then(r => setZones(r.data)).catch(() => {});
   }, []);
 
   return (
@@ -70,61 +73,81 @@ export default function MapContent({ recentClaims = [] }: { recentClaims?: any[]
     >
       <MapResizer />
       <TileLayer
-        attribution='&copy; CARTO'
+        attribution="&copy; CARTO"
         url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
       />
-      
-      {ZONES.map((zone) => (
-        <div key={zone.id}>
-          <Marker position={zone.coords as [number, number]}>
-            <Popup>
-              <div className="p-2">
-                 <p className="text-[var(--color-accent)] font-black uppercase text-[10px] tracking-widest">{zone.name}</p>
-                 <p className="text-[var(--color-accent)]/40 text-[9px] font-bold uppercase mt-1">Status: Active</p>
-              </div>
-            </Popup>
-          </Marker>
-          <CircleMarker
-            center={zone.coords as [number, number]}
-            radius={35}
-            pathOptions={{
-              color: '#1B4332',
-              fillColor: '#1B4332',
-              fillOpacity: 0.05,
-              weight: 1,
-              dashArray: '5, 10'
-            }}
-          />
-        </div>
-      ))}
+
+      {zones.map((zone) => {
+        const colors = riskColor(zone.flood_risk_index);
+        return (
+          <div key={zone.id}>
+            <Marker position={[zone.lat, zone.lng]}>
+              <Popup>
+                <div style={{ padding: "10px 12px", minWidth: 168 }}>
+                  <p style={{ fontWeight: 800, fontSize: 13, marginBottom: 8 }}>{zone.name}</p>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11 }}>
+                      <span style={{ color: "#6B7280" }}>Flood Risk</span>
+                      <span style={{ fontWeight: 700, color: colors.stroke }}>
+                        {riskLabel(zone.flood_risk_index)} ({(zone.flood_risk_index * 100).toFixed(0)}%)
+                      </span>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11 }}>
+                      <span style={{ color: "#6B7280" }}>Zone Factor</span>
+                      <span style={{ fontWeight: 700 }}>{zone.zone_factor.toFixed(2)}×</span>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11 }}>
+                      <span style={{ color: "#6B7280" }}>Pin Code</span>
+                      <span style={{ fontWeight: 700 }}>{zone.pin_code}</span>
+                    </div>
+                  </div>
+                </div>
+              </Popup>
+            </Marker>
+            <CircleMarker
+              center={[zone.lat, zone.lng]}
+              radius={38}
+              pathOptions={{
+                color: colors.stroke,
+                fillColor: colors.fill,
+                fillOpacity: 0.08,
+                weight: 1.5,
+                dashArray: "6, 8",
+              }}
+            />
+          </div>
+        );
+      })}
 
       {recentClaims.slice(0, 15).map((c, i) => {
-        const zone = ZONES.find((z) => z.id === (c.zone_id || 'zone-bandra')) || ZONES[0];
-        const jitterLat = zone.coords[0] + (Math.random() - 0.5) * 0.03;
-        const isCoastal = ['zone-bandra', 'zone-dadar', 'zone-andheri'].includes(zone.id);
-        const lngJitter = isCoastal ? (Math.random() * 0.025) : ((Math.random() - 0.5) * 0.03);
-        const jitterLng = zone.coords[1] + lngJitter;
-        const isFraud = c.as_score < 45 || c.status === 'manual_review';
-        
+        const zone = zones.find((z) => z.id === (c.zone_id || "zone-bandra")) || zones[0];
+        if (!zone) return null;
+        const jitterLat = zone.lat + (Math.random() - 0.5) * 0.03;
+        const jitterLng = zone.lng + (Math.random() - 0.5) * 0.03;
+        const isFraud = c.as_score < 45 || c.status === "manual_review";
         return (
           <CircleMarker
             key={`claim-${c.id}-${i}`}
             center={[jitterLat, jitterLng]}
             radius={isFraud ? 10 : 7}
             pathOptions={{
-              color: isFraud ? '#F87171' : '#1B4332',
-              fillColor: isFraud ? '#F87171' : '#1B4332',
+              color: isFraud ? "#EF4444" : "#10B981",
+              fillColor: isFraud ? "#EF4444" : "#10B981",
               fillOpacity: 0.8,
-              weight: 3
+              weight: 3,
             }}
           >
             <Popup>
-              <div className="p-3 text-center">
-                <p className="text-[10px] font-black text-[var(--color-accent)]/40 uppercase mb-1">#{c.id?.substring(0,6).toUpperCase()}</p>
-                <p className="text-xl font-black text-[var(--color-accent)] tracking-tighter">₹{(c.payout_amount_rs || 0).toLocaleString()}</p>
-                <div className="mt-3 flex items-center justify-center gap-2">
-                    <div className={`w-2 h-2 rounded-full ${isFraud ? 'bg-red-500' : 'bg-white/10'}`}></div>
-                    <span className="text-[10px] font-black uppercase tracking-widest text-[var(--color-accent)]">{isFraud ? 'Alert' : 'Settled'}</span>
+              <div style={{ padding: "10px 12px", textAlign: "center" }}>
+                <p style={{ fontSize: 10, color: "#6B7280", textTransform: "uppercase", marginBottom: 4 }}>
+                  #{c.id?.substring(0, 6).toUpperCase()}
+                </p>
+                <p style={{ fontSize: 20, fontWeight: 800 }}>₹{(c.payout_amount_rs || 0).toLocaleString()}</p>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 8 }}>
+                  <div style={{ width: 8, height: 8, borderRadius: "50%", background: isFraud ? "#EF4444" : "#10B981" }} />
+                  <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase" }}>
+                    {isFraud ? "Under Review" : "Settled"}
+                  </span>
                 </div>
               </div>
             </Popup>

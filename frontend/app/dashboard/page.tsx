@@ -134,6 +134,13 @@ export default function DashboardPage() {
             <span className="material-symbols-outlined text-xl">bar_chart</span>
             <span>Analytics</span>
           </button>
+          <button
+            onClick={() => router.push('/profile')}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-sm font-bold text-white/60 hover:text-white hover:bg-white/5"
+          >
+            <span className="material-symbols-outlined text-xl">person</span>
+            <span>My Profile</span>
+          </button>
         </nav>
         <div className="p-4 border-t border-white/10">
           <button

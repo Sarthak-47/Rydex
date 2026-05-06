@@ -10,7 +10,6 @@ export const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
-// Attach JWT token to every request if present
 api.interceptors.request.use((config) => {
   if (typeof window !== 'undefined') {
     const token = localStorage.getItem('rydex_token')
@@ -19,7 +18,6 @@ api.interceptors.request.use((config) => {
   return config
 })
 
-// Redirect to login on 401
 api.interceptors.response.use(
   (res) => res,
   (err) => {
@@ -43,6 +41,7 @@ export const authApi = {
 // ── Workers ───────────────────────────────────────────────────────────────────
 export const workersApi = {
   register: (data: RegisterPayload) => api.post('/workers/register', data),
+  sendOtp: (phone: string) => api.post('/workers/send-otp', { phone }),
   verifyOtp: (phone: string, otp: string) => api.post('/workers/verify-otp', { phone, otp }),
   getZones: () => api.get('/workers/zones'),
 }
@@ -55,6 +54,9 @@ export const policiesApi = {
 // ── Claims ────────────────────────────────────────────────────────────────────
 export const claimsApi = {
   list: (workerId: string) => api.get(`/claims?worker_id=${workerId}`),
+  getTransparency: (claimId: string) => api.get(`/claims/${claimId}/transparency`),
+  submitAppeal: (claimId: string, explanation: string, contactPhone?: string) =>
+    api.post(`/claims/${claimId}/appeal`, { explanation, contact_phone: contactPhone || '' }),
   adminAll: () => api.get('/claims/admin/all'),
 }
 
@@ -68,24 +70,7 @@ export const triggerEventsApi = {
   list: (zoneId: string) => api.get(`/trigger-events?zone_id=${zoneId}`),
 }
 
-// ── Demo ──────────────────────────────────────────────────────────────────────
-export const demoApi = {
-  fireTrigger: (zoneId: string, triggerType: string, durationMinutes = 90) =>
-    api.post('/demo/fire-trigger', {
-      zone_id: zoneId,
-      trigger_type: triggerType,
-      duration_minutes: durationMinutes,
-    }),
-  fireFraudCase: (zoneId: string, durationMinutes = 90) =>
-    api.post('/demo/fire-fraud-case', {
-      zone_id: zoneId,
-      duration_minutes: durationMinutes,
-    }),
-  resetDemoData: () => api.delete('/demo/reset-demo-data'),
-  getScenario: () => api.get('/demo/scenario'),
-}
-
-// ── Analytics (Phase 3) ───────────────────────────────────────────────────────
+// ── Analytics ─────────────────────────────────────────────────────────────────
 export const analyticsApi = {
   lossRatios: () => api.get('/analytics/loss-ratios'),
   asDistribution: () => api.get('/analytics/as-distribution'),
@@ -144,6 +129,29 @@ export interface Claim {
   resolved_at: string | null
 }
 
+export interface ClaimTransparency {
+  claim_id: string
+  as_score: number
+  status: string
+  payout_amount_rs: number
+  disrupted_hours: number
+  hourly_baseline_rs: number
+  as_multiplier: number
+  signals: Array<{
+    key: string
+    label: string
+    score: number
+    weight_pct: number
+    contribution: number
+    status: 'pass' | 'warn' | 'fail'
+  }>
+  iso_anomaly_flag: boolean
+  decision_reason: string
+  appeal_eligible: boolean
+  created_at: string
+  resolved_at: string | null
+}
+
 export interface Payout {
   id: string
   amount_rs: number
@@ -163,10 +171,28 @@ export interface TriggerEvent {
   threshold_value: number
   threshold_limit: number
   duration_minutes: number
-  is_demo: boolean
 }
 
-// ── Analytics Types ───────────────────────────────────────────────────────────
+export interface ForecastAlert {
+  alert_id: string
+  zone_id: string
+  zone_name: string
+  trigger_type: string
+  severity: string
+  probability_pct: number
+  expected_value: number
+  threshold: number
+  unit: string
+  expected_onset_utc: string
+  expected_onset_hours_from_now: number
+  expected_duration_mins: number
+  expected_payout_per_worker_rs: number
+  workers_at_risk: number
+  total_exposure_rs: number
+  icon: string
+  recommendation: string
+}
+
 export interface ZoneLossRatio {
   zone_id: string
   zone_name: string
@@ -180,12 +206,7 @@ export interface ZoneLossRatio {
   flagged_claims: number
   total_claims: number
   avg_payout_rs: number
-  weekly_trend: Array<{
-    week: string
-    loss_ratio: number
-    premium_rs: number
-    paid_rs: number
-  }>
+  weekly_trend: Array<{ week: string; loss_ratio: number; premium_rs: number; paid_rs: number }>
 }
 
 export interface ASDistribution {
@@ -207,13 +228,7 @@ export interface FraudRing {
   total_claimed_rs: number
   risk_level: string
   recommended_action: string
-  members: Array<{
-    worker_name: string
-    as_score: number
-    payout_rs: number
-    status: string
-    created_at: string
-  }>
+  members: Array<{ worker_name: string; as_score: number; payout_rs: number; status: string; created_at: string }>
 }
 
 export interface SyndicateAlert {
@@ -228,24 +243,4 @@ export interface SyndicateAlert {
   risk_tier: string
   explanation: string
   signal_scores: Record<string, number>
-}
-
-export interface ForecastAlert {
-  alert_id: string
-  zone_id: string
-  zone_name: string
-  trigger_type: string
-  severity: string
-  probability_pct: number
-  expected_value: number
-  threshold: number
-  unit: string
-  expected_onset_utc: string
-  expected_onset_hours_from_now: number
-  expected_duration_mins: number
-  expected_payout_per_worker_rs: number
-  workers_at_risk: number
-  total_exposure_rs: number
-  icon: string
-  recommendation: string
 }

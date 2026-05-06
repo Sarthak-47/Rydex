@@ -58,6 +58,8 @@ export const claimsApi = {
   submitAppeal: (claimId: string, explanation: string, contactPhone?: string) =>
     api.post(`/claims/${claimId}/appeal`, { explanation, contact_phone: contactPhone || '' }),
   adminAll: () => api.get('/claims/admin/all'),
+  resolveAdmin: (claimId: string, action: 'approve' | 'reject', note?: string) =>
+    api.patch(`/claims/${claimId}/resolve`, { action, note: note || '' }),
 }
 
 // ── Payouts ───────────────────────────────────────────────────────────────────

@@ -171,6 +171,41 @@ def submit_appeal(claim_id: str, req: AppealRequest, db: Session = Depends(get_d
     }
 
 
+class ResolveRequest(BaseModel):
+    action: str  # "approve" | "reject"
+    note: str = ""
+
+
+@router.patch("/{claim_id}/resolve")
+def resolve_claim(claim_id: str, req: ResolveRequest, db: Session = Depends(get_db)):
+    """Admin action: manually approve or reject a claim in manual_review or soft_hold."""
+    claim = db.get(Claim, claim_id)
+    if not claim:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    if req.action not in ("approve", "reject"):
+        raise HTTPException(status_code=400, detail="action must be 'approve' or 'reject'")
+    if claim.status == ClaimStatusEnum.auto_approved:
+        raise HTTPException(status_code=400, detail="Claim already approved")
+
+    claim.status = ClaimStatusEnum.auto_approved if req.action == "approve" else ClaimStatusEnum.rejected
+    claim.resolved_at = datetime.utcnow()
+
+    bd = claim.as_breakdown or {}
+    bd["admin_resolution"] = {
+        "action": req.action,
+        "note": req.note.strip(),
+        "resolved_at": claim.resolved_at.isoformat(),
+    }
+    claim.as_breakdown = bd
+    db.commit()
+
+    return {
+        "status": claim.status.value,
+        "claim_id": claim_id,
+        "resolved_at": claim.resolved_at.isoformat(),
+    }
+
+
 @router.get("/admin/all")
 def all_claims(db: Session = Depends(get_db)):
     claims = (

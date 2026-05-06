@@ -1,0 +1,55 @@
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: rydex_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rydex_root
+      MYSQL_DATABASE: rydex
+      MYSQL_USER: rydex_user
+      MYSQL_PASSWORD: rydex_pass
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    container_name: rydex_backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: mysql+pymysql://rydex_user:rydex_pass@mysql:3306/rydex
+      OPENWEATHER_API_KEY: ${OPENWEATHER_API_KEY:-demo_key}
+      AQI_API_KEY: ${AQI_API_KEY:-demo_key}
+      JWT_SECRET: rydex_jwt_secret_change_in_prod
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-rzp_test_demo}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-demo_secret}
+      DEMO_MODE: "true"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+
+  frontend:
+    build: ./frontend
+    container_name: rydex_frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+      INTERNAL_API_URL: http://backend:8000
+    depends_on:
+      - backend
+
+volumes:
+  mysql_data:

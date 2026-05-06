@@ -1,0 +1,97 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Manrope:wght@800&family=Roboto+Mono&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-background: #060B19; /* Deep Midnight Blue Base */
+  --color-primary: #10162A; /* Midnight Blue Card */
+  --color-on-background: #F8FAFC; /* Slate 50 */
+  --color-accent: #10B981; /* Emerald Green Action */
+  --font-headline: 'Manrope', sans-serif;
+  --font-body: 'Inter', sans-serif;
+}
+
+@layer components {
+  /* Pattern: Premium Card (Midnight Glassmorphism) */
+  .card-premium {
+    @apply bg-[#10162A] border border-[#2A344A] text-[#F8FAFC] rounded-2xl shadow-lg transition-all duration-500 hover:bg-[#151D36] hover:border-[#384661];
+  }
+
+  /* Pattern: Main Action Button (Emerald) */
+  .btn-primary {
+    @apply bg-[var(--color-accent)] text-[#022A1E] rounded-xl px-6 py-3 font-semibold text-sm transition-all duration-300 hover:bg-[#059669] shadow-md;
+  }
+
+  /* Pattern: Accent Button - Unified to Emerald as well! */
+  .btn-accent {
+    @apply bg-[var(--color-accent)] text-[#022A1E] rounded-xl px-6 py-3 font-semibold text-sm transition-all duration-300 hover:bg-[#059669] shadow-md;
+  }
+
+  /* Pattern: Secondary Button (Outline) */
+  .btn-secondary {
+    @apply bg-transparent text-[#F8FAFC] border border-[#2A344A] rounded-xl px-6 py-3 font-semibold text-sm transition-all duration-300 hover:border-[#384661] hover:bg-[#151D36];
+  }
+
+  /* Pattern: Danger Button */
+  .btn-danger {
+    @apply bg-red-500/10 text-red-500 border border-red-500/20 rounded-xl px-6 py-3 font-semibold text-sm transition-all hover:bg-red-500 hover:text-white shadow-sm flex items-center justify-center gap-2;
+  }
+
+  /* Pattern: Form Inputs */
+  .input-premium {
+    @apply w-full px-4 py-3 bg-[#0C1222] border border-[#2A344A] rounded-xl focus:ring-2 focus:ring-[var(--color-accent)] focus:border-transparent focus:outline-none font-mono text-sm transition-all text-[#F8FAFC] placeholder:text-[#64748B];
+  }
+
+  /* Pattern: Typography */
+  .text-title {
+    @apply font-headline font-bold text-[#F8FAFC] tracking-tight uppercase;
+  }
+
+  .text-muted {
+    @apply text-[#94A3B8] font-semibold text-xs;
+  }
+
+  /* Pattern: Tag/Badge */
+  .badge-premium {
+    @apply px-3 py-1 rounded-md text-xs font-semibold border border-[#2A344A] bg-[#151D36] text-[#E2E8F0] shadow-sm;
+  }
+}
+
+body {
+  background: var(--color-background);
+  color: var(--color-on-background);
+  font-family: var(--font-body);
+  @apply min-h-screen antialiased selection:bg-[var(--color-accent)] selection:text-[#022A1E];
+  background-image: 
+    radial-gradient(circle at 10% 40%, rgba(16, 185, 129, 0.05), transparent 30%),
+    radial-gradient(circle at 90% 60%, rgba(56, 189, 248, 0.03), transparent 30%);
+}
+
+input, select, textarea {
+  @apply text-[#F8FAFC]; 
+}
+
+/* Material Symbols Default config */
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+/* Smooth Scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  @apply w-2;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-[#060B19];
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-[#2A344A] rounded-full hover:bg-[#384661] transition-colors;
+}

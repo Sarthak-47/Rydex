@@ -1,0 +1,6 @@
+node_modules
+.next
+.git
+.env*.local
+build.log
+build_clean.log

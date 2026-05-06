@@ -1,0 +1,49 @@
+# Environments
+.env
+.venv/
+env/
+venv/
+ENV/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+.pytest_cache/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.next/
+out/
+build/
+.pnp.*
+
+# Database
+mysql_data/
+*.sqlite3
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# IDEs
+.idea/
+.vscode/
+
+# Logs and scratch
+*.log
+*.txt
+!requirements.txt
+!startup.txt
+!CHANGELOG.md
+
+# Build
+dist/
+*.egg-info/

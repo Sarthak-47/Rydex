@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { claimsApi, payoutsApi, Claim, Payout } from '@/lib/api'
 import ClaimModal from './ClaimModal'
 import { motion } from 'framer-motion'
@@ -10,6 +11,7 @@ interface ClaimsListProps {
 }
 
 export default function ClaimsList({ workerId, refreshTrigger }: ClaimsListProps) {
+  const router = useRouter()
   const [claims, setClaims] = useState<Claim[]>([])
   const [payouts, setPayouts] = useState<Payout[]>([])
   const [loading, setLoading] = useState(true)
@@ -136,7 +138,13 @@ export default function ClaimsList({ workerId, refreshTrigger }: ClaimsListProps
                       {claim.resolved_at ? 'Settlement Resolved' : 'Verification Pipeline'}
                     </span>
                 </div>
-                <span className="material-symbols-outlined text-[var(--color-accent)]/20 text-2xl group-hover:translate-x-2 group-hover:text-[var(--color-accent)] transition-all duration-500">arrow_forward_ios</span>
+                <button
+                  onClick={(e) => { e.stopPropagation(); router.push(`/claims/${claim.id}`) }}
+                  className="text-[10px] font-black text-white/40 hover:text-[var(--color-accent)] uppercase tracking-widest flex items-center gap-1 transition-colors"
+                >
+                  Breakdown
+                  <span className="material-symbols-outlined text-sm">open_in_new</span>
+                </button>
               </div>
             </motion.div>
           ))}

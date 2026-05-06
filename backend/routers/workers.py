@@ -1,17 +1,21 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from passlib.context import CryptContext
 from datetime import datetime, timedelta
 import uuid
+import logging
 
-from db.models import Worker, Zone, Policy, PolicyStatusEnum, TierEnum
+from db.models import Worker, Zone, Policy, PolicyStatusEnum
 from db.deps import get_db
 from services.baseline import compute_baseline
 from services.premium import compute_premium
+from config import get_settings
 
 router = APIRouter()
-pwd_ctx = CryptContext(schemes=["bcrypt", "sha256_crypt"], deprecated="auto")
+logger = logging.getLogger(__name__)
+pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
+settings = get_settings()
 
 
 class RegisterRequest(BaseModel):
@@ -28,10 +32,66 @@ class RegisterRequest(BaseModel):
     avg_orders_per_day: int = 15
     upi_id: str = ""
 
+    @field_validator("phone")
+    @classmethod
+    def validate_phone(cls, v: str) -> str:
+        digits = v.replace("+", "").replace("-", "").replace(" ", "")
+        if not digits.isdigit() or len(digits) < 10:
+            raise ValueError("Invalid phone number")
+        return v
+
+    @field_validator("platform")
+    @classmethod
+    def validate_platform(cls, v: str) -> str:
+        allowed = {"swiggy", "zomato", "blinkit", "dunzo", "instamart", "other"}
+        if v.lower() not in allowed:
+            raise ValueError(f"Platform must be one of: {', '.join(allowed)}")
+        return v.lower()
+
+
+class OTPRequest(BaseModel):
+    phone: str
+
 
 class OTPVerifyRequest(BaseModel):
     phone: str
     otp: str
+
+
+@router.post("/send-otp")
+def send_otp(req: OTPRequest):
+    if not settings.has_sms():
+        raise HTTPException(
+            status_code=503,
+            detail="SMS service not configured. Set TWILIO_* environment variables.",
+        )
+    try:
+        from twilio.rest import Client
+        client = Client(settings.twilio_account_sid, settings.twilio_auth_token)
+        import random
+        otp = str(random.randint(100000, 999999))
+        client.messages.create(
+            body=f"Your Rydex verification code is: {otp}",
+            from_=settings.twilio_phone_number,
+            to=req.phone,
+        )
+        return {"sent": True, "message": "OTP sent successfully"}
+    except Exception as e:
+        logger.error("OTP send failed: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to send OTP")
+
+
+@router.post("/verify-otp")
+def verify_otp(req: OTPVerifyRequest):
+    if not settings.has_sms():
+        raise HTTPException(
+            status_code=503,
+            detail="SMS service not configured. Set TWILIO_* environment variables.",
+        )
+    raise HTTPException(
+        status_code=501,
+        detail="OTP verification requires Twilio Verify Service integration.",
+    )
 
 
 @router.post("/register")
@@ -86,12 +146,6 @@ def register(req: RegisterRequest, db: Session = Depends(get_db)):
         amount_paid_rs=0.0,
     )
     db.add(policy)
-    db.flush()
-
-    # Verify the policy was created correctly
-    assert policy.status == PolicyStatusEnum.active
-    assert policy.worker_id == worker.id
-
     db.commit()
 
     return {
@@ -113,13 +167,6 @@ def register(req: RegisterRequest, db: Session = Depends(get_db)):
     }
 
 
-@router.post("/verify-otp")
-def verify_otp(req: OTPVerifyRequest):
-    if req.otp != "123456":
-        raise HTTPException(status_code=400, detail="Invalid OTP")
-    return {"verified": True}
-
-
 @router.get("/zones")
 def list_zones(db: Session = Depends(get_db)):
     zones = db.query(Zone).all()
@@ -128,33 +175,11 @@ def list_zones(db: Session = Depends(get_db)):
             "id": z.id,
             "name": z.name,
             "pin_code": z.pin_code,
+            "city": z.city,
             "zone_factor": z.zone_factor,
             "flood_risk_index": z.flood_risk_index,
+            "lat": z.lat,
+            "lng": z.lng,
         }
         for z in zones
-    ]
-
-
-@router.get("/debug/all-workers")
-def debug_all_workers(db: Session = Depends(get_db)):
-    workers = db.query(Worker).all()
-    return [
-        {
-            "id": w.id,
-            "name": w.name,
-            "zone_id": w.zone_id,
-            "zone_name": w.zone.name if w.zone else None,
-            "policies": [
-                {
-                    "id": p.id,
-                    "status": p.status,
-                    "tier": p.tier,
-                    "week_start": p.week_start.isoformat(),
-                    "week_end": p.week_end.isoformat(),
-                    "amount_paid_rs": p.amount_paid_rs,
-                }
-                for p in w.policies
-            ]
-        }
-        for w in workers
     ]

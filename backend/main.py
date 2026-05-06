@@ -16,14 +16,17 @@ from db.models import get_engine, get_session_factory, create_all_tables, Worker
 from db.deps import init_db, get_db
 from services.trigger_monitor import TriggerMonitor
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s — %(message)s",
+)
 logger = logging.getLogger("rydex")
 
 settings = get_settings()
 engine = get_engine(settings.database_url)
 SessionLocal = get_session_factory(engine)
 
-pwd_ctx = CryptContext(schemes=["bcrypt", "sha256_crypt"], deprecated="auto")
+pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token")
 
 _monitor: Optional[TriggerMonitor] = None
@@ -34,8 +37,8 @@ async def lifespan(app: FastAPI):
     global _monitor
     create_all_tables(engine)
     init_db(SessionLocal)
-    from db.seed import seed as run_seed
     with SessionLocal() as session:
+        from db.seed import seed as run_seed
         run_seed(session)
     _monitor = TriggerMonitor(database_url=settings.database_url, poll_interval=60)
     _monitor.start()
@@ -54,10 +57,10 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=[settings.frontend_url],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 
@@ -93,7 +96,6 @@ def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get
         ok = False
     if not ok:
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    # Include zone context in token for a clean demo UX (avoids extra profile API call)
     zone_name = worker.zone.name if worker.zone else None
     token = create_token(
         {
@@ -103,25 +105,31 @@ def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get
             "zone_name": zone_name,
         }
     )
-    return {"access_token": token, "token_type": "bearer", "worker_id": worker.id, "name": worker.name}
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "worker_id": worker.id,
+        "name": worker.name,
+    }
 
 
 @app.get("/health")
 def health():
     return {
         "status": "ok",
-        "demo_mode": settings.demo_mode,
+        "weather_api": settings.has_weather_api(),
+        "payments": settings.has_payments(),
+        "sms": settings.has_sms(),
         "trigger_monitor": "running" if (_monitor and _monitor.is_alive()) else "stopped",
         "timestamp": datetime.utcnow().isoformat(),
     }
 
 
-from routers import workers, policies, claims, payouts, demo, trigger_events, analytics  # noqa: E402
+from routers import workers, policies, claims, payouts, trigger_events, analytics  # noqa: E402
 
 app.include_router(workers.router, prefix="/workers", tags=["Workers"])
 app.include_router(policies.router, prefix="/policies", tags=["Policies"])
 app.include_router(claims.router, prefix="/claims", tags=["Claims"])
 app.include_router(payouts.router, prefix="/payouts", tags=["Payouts"])
 app.include_router(trigger_events.router, prefix="/trigger-events", tags=["Trigger Events"])
-app.include_router(demo.router, prefix="/demo", tags=["Demo"])
 app.include_router(analytics.router, prefix="/analytics", tags=["Analytics"])

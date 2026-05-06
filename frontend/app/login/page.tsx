@@ -82,7 +82,7 @@ export default function LoginPage() {
                 <span className="absolute left-6 top-1/2 -translate-y-1/2 text-white/60 font-mono text-xl font-black">IN+</span>
                 <input 
                   className="input-premium pl-20" 
-                  placeholder="9820001001" 
+                  placeholder="98XXXXXXXX"
                   type="tel"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
